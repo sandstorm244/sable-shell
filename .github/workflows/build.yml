@@ -1,0 +1,82 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # attach artifacts to releases on tag builds
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same commands as the README, step 1: dependencies + venmic
+      # compiled from its bundled source, vendored into vendor/venmic/
+      - name: Dependencies + venmic (from source)
+        run: |
+          docker run --rm -v "$PWD":/w -w /w node:24-trixie bash -c '
+            apt-get update -qq && apt-get install -y -qq \
+              libpipewire-0.3-dev libpulse-dev cmake build-essential ninja-build git &&
+            cd /w && npm ci &&
+            node node_modules/electron/install.js &&
+            rm -rf node_modules/@vencord/venmic/prebuilds node_modules/@vencord/venmic/build &&
+            (cd node_modules/@vencord/venmic && npx cmake-js compile --CDvenmic_addon=ON) &&
+            cp node_modules/@vencord/venmic/build/Release/venmic-addon.node vendor/venmic/ &&
+            chown -R '"$(id -u):$(id -g)"' /w'
+
+      - name: AppImage + deb
+        run: |
+          docker run --rm -v "$PWD":/w -w /w electronuserland/builder:22 \
+            bash -c 'cd /w && npm run dist:linux && chown -R '"$(id -u):$(id -g)"' /w'
+
+      - name: Flatpak
+        run: ./flatpak/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.flatpak
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.flatpak
+
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # npm ci runs inside the wine container too (the script gate keeps
+      # install scripts from running; electron-builder downloads the
+      # Windows electron runtime itself)
+      - name: Window helper + NSIS/portable exes
+        run: |
+          docker run --rm -v "$PWD":/w -w /w electronuserland/builder:wine \
+            bash -c 'apt-get update -qq && apt-get install -y -qq mono-mcs &&
+              cd /w && npm ci &&
+              mkdir -p build-res/win &&
+              mcs -optimize -out:build-res/win/sable-winhelper.exe win/helper.cs &&
+              npm run dist:win && chown -R '"$(id -u):$(id -g)"' /w'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
