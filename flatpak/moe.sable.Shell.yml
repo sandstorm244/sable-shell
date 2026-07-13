@@ -1,0 +1,62 @@
+# Flatpak manifest for sable-shell.
+#
+# Packages the electron-builder output (dist/linux-unpacked) with the
+# standard Electron base app; zypak bridges Chromium's own sandbox into
+# flatpak's. Build with flatpak/build.sh (or see README).
+#
+# Sandbox rationale (finish-args):
+#   network                  — the web client loads from your server
+#   x11 + ipc                — display; window capture on X11
+#   wayland                  — display on Wayland sessions (screen capture
+#                              there goes through the screencast portal)
+#   pulseaudio               — microphone / call audio
+#   xdg-run/pipewire-0       — the ONE extra hole: venmic's per-app audio
+#                              capture talks to PipeWire directly (same
+#                              grant OBS uses)
+#   dri                      — GPU acceleration
+# Notably absent: no --filesystem=home, no host D-Bus, no device=all.
+
+app-id: moe.sable.Shell
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: sable-shell
+separate-locales: false
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  - --device=dri
+  - --talk-name=org.freedesktop.Notifications
+  # tray icon (StatusNotifier protocol; xfce 4.16+ / KDE / most trays)
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+modules:
+  - name: sable-shell
+    buildsystem: simple
+    build-commands:
+      - cp -a linux-unpacked /app/sable-shell
+      - install -Dm755 sable-shell.sh /app/bin/sable-shell
+      - install -Dm644 moe.sable.Shell.desktop /app/share/applications/moe.sable.Shell.desktop
+      - install -Dm644 icon.svg /app/share/icons/hicolor/scalable/apps/moe.sable.Shell.svg
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/moe.sable.Shell.png
+    sources:
+      - type: dir
+        path: ../dist/linux-unpacked
+        dest: linux-unpacked
+      - type: file
+        path: sable-shell.sh
+      - type: file
+        path: moe.sable.Shell.desktop
+      - type: file
+        path: ../build-res/icon.svg
+        dest-filename: icon.svg
+      - type: file
+        path: ../build-res/icon.png
+        dest-filename: icon.png

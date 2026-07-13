@@ -1,0 +1,5 @@
+node_modules/
+dist/
+vendor/**/*.node
+build-res/win/
+flatpak/.flatpak-builder/

@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Sable — connect</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 14px/1.5 system-ui, sans-serif;
+    background: #1a1a1e; color: #e6e6ea;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100vh; padding: 28px;
+    user-select: none;
+  }
+  img.logo { width: 72px; height: 72px; margin-bottom: 14px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  p.sub { color: #9a9aa4; font-size: 13px; margin-bottom: 22px; }
+  form { width: 100%; max-width: 340px; display: flex; flex-direction: column; }
+  label { font-size: 12px; color: #9a9aa4; margin-bottom: 6px; }
+  input {
+    width: 100%; font: inherit; color: #e6e6ea;
+    background: #26262c; border: 1px solid #35353d; border-radius: 8px;
+    padding: 10px 12px; outline: none;
+  }
+  input:focus { border-color: #3d5afe; }
+  .status { font-size: 12px; min-height: 20px; margin: 8px 2px; }
+  .status.error { color: #ff6b6b; }
+  .status.busy { color: #9a9aa4; }
+  button {
+    font: inherit; font-weight: 600; color: #fff;
+    background: #3d5afe; border: 1px solid #3d5afe; border-radius: 8px;
+    padding: 10px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+  <img class="logo" src="../icon.png" alt="" />
+  <h1>Sable</h1>
+  <p class="sub">Sign in to your server to continue</p>
+  <form id="form">
+    <label for="url">Server</label>
+    <input id="url" type="url" placeholder="https://your.sable.server"
+           spellcheck="false" autocomplete="url" autofocus />
+    <div class="status" id="status"></div>
+    <button id="go" type="submit">Connect</button>
+  </form>
+<script>
+  const input = document.getElementById("url");
+  const status = document.getElementById("status");
+  const button = document.getElementById("go");
+
+  function setStatus(text, kind) {
+    status.textContent = text;
+    status.className = "status " + (kind || "");
+  }
+
+  document.getElementById("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    let value = input.value.trim();
+    if (value && !/^https?:\/\//.test(value)) value = "https://" + value;
+    try {
+      const u = new URL(value);
+      if (!["https:", "http:"].includes(u.protocol)) throw new Error();
+    } catch {
+      setStatus("That doesn't look like a URL.", "error");
+      return;
+    }
+    button.disabled = true;
+    setStatus("Checking " + value + "…", "busy");
+    setupAPI.submit(value);
+  });
+
+  setupAPI.onError((message) => {
+    button.disabled = false;
+    setStatus("Couldn't reach the server: " + message, "error");
+  });
+</script>
+</body>
+</html>

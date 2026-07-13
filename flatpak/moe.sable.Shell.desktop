@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Sable
+Comment=Sable desktop shell with screen-share application audio
+Exec=sable-shell
+Icon=moe.sable.Shell
+Terminal=false
+Type=Application
+Categories=Network;Chat;
+StartupWMClass=Sable

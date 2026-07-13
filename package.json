@@ -1,0 +1,65 @@
+{
+  "name": "sable-shell",
+  "version": "0.1.1",
+  "description": "Minimal desktop shell for Sable: loads the web client from your server and adds screen sharing with application audio (PipeWire on Linux, system loopback on Windows).",
+  "main": "src/main.js",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://github.com/SableClient/Sable",
+  "scripts": {
+    "start": "electron .",
+    "dist:linux": "electron-builder --linux",
+    "dist:dir": "electron-builder --linux dir",
+    "dist:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "x11": "2.3.0"
+  },
+  "devDependencies": {
+    "@vencord/venmic": "^6.1.0",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "moe.sable.Shell",
+    "productName": "Sable",
+    "npmRebuild": false,
+    "directories": {
+      "buildResources": "build-res"
+    },
+    "files": [
+      "src/**/*",
+      "vendor/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "vendor/**/*.node"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "maintainer": "shell@sable.moe",
+      "icon": "build-res/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build-res/icon.png",
+      "extraResources": [
+        {
+          "from": "build-res/win/sable-winhelper.exe",
+          "to": "winhelper/sable-winhelper.exe"
+        }
+      ]
+    }
+  },
+  "allowScripts": {
+    "electron@43.1.0": true,
+    "electron-winstaller@5.4.0": true,
+    "@vencord/venmic@6.1.0": true
+  }
+}

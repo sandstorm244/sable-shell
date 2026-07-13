@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Share your screen</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 14px/1.4 system-ui, sans-serif;
+    background: #1a1a1e; color: #e6e6ea;
+    display: flex; flex-direction: column; height: 100vh; padding: 14px;
+    user-select: none;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button {
+    background: #26262c; color: #cfcfd6; border: 1px solid #35353d;
+    border-radius: 6px; padding: 5px 14px; cursor: pointer; font: inherit;
+  }
+  .tabs button.active { background: #3d5afe22; border-color: #3d5afe; color: #fff; }
+  #grid {
+    flex: 1; overflow-y: auto; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px; align-content: start; padding: 2px;
+  }
+  .tile {
+    background: #222228; border: 2px solid transparent; border-radius: 8px;
+    padding: 6px; cursor: pointer; text-align: center;
+  }
+  .tile:hover { background: #2a2a31; }
+  .tile.selected { border-color: #3d5afe; }
+  .tile img.thumb {
+    width: 100%; aspect-ratio: 16/10; object-fit: contain;
+    background: #111114; border-radius: 4px;
+  }
+  .tile .placeholder {
+    width: 100%; aspect-ratio: 16/10; border-radius: 4px;
+    background: repeating-linear-gradient(45deg, #17171b, #17171b 12px, #1c1c21 12px, #1c1c21 24px);
+    display: flex; align-items: center; justify-content: center;
+    color: #77777f; font-size: 12px;
+  }
+  .tile .label {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 6px; font-size: 12px; color: #cfcfd6;
+    overflow: hidden; white-space: nowrap;
+  }
+  .tile .label span { overflow: hidden; text-overflow: ellipsis; }
+  .tile img.icon { width: 16px; height: 16px; flex: none; }
+  .bottom {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid #2c2c33;
+  }
+  label[for="audio"] { color: #9a9aa4; font-size: 13px; }
+  select {
+    background: #26262c; color: #e6e6ea; border: 1px solid #35353d;
+    border-radius: 6px; padding: 5px 8px; font: inherit; max-width: 280px;
+  }
+  .spacer { flex: 1; }
+  .bottom button {
+    font: inherit; border-radius: 6px; padding: 7px 18px; cursor: pointer;
+    border: 1px solid #35353d; background: #26262c; color: #e6e6ea;
+  }
+  #share { background: #3d5afe; border-color: #3d5afe; color: #fff; font-weight: 600; }
+  #share:disabled { opacity: 0.4; cursor: default; }
+  .note { color: #77777f; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Share your screen</h1>
+  <div class="tabs">
+    <button id="tab-window" class="active">Application windows</button>
+    <button id="tab-screen">Entire screens</button>
+  </div>
+  <div id="grid"></div>
+  <div class="bottom">
+    <label for="audio">Audio:</label>
+    <select id="audio"></select>
+    <span class="note" id="audio-note"></span>
+    <div class="spacer"></div>
+    <button id="cancel">Cancel</button>
+    <button id="share" disabled>Share</button>
+  </div>
+
+<script>
+  let sources = [];
+  let selectedId = null;
+  let kind = "window";
+  let audioOpts = { kind: "none", apps: [] };
+  let winAudio = null; // {pid, klass} of the selected window
+
+  const grid = document.getElementById("grid");
+  const shareBtn = document.getElementById("share");
+  const audioSel = document.getElementById("audio");
+  const audioNote = document.getElementById("audio-note");
+
+  function render() {
+    grid.replaceChildren();
+    for (const s of sources.filter((s) => s.kind === kind)) {
+      const tile = document.createElement("div");
+      tile.className = "tile" + (s.id === selectedId ? " selected" : "");
+      let thumb;
+      if (s.thumbnail) {
+        thumb = document.createElement("img");
+        thumb.className = "thumb";
+        thumb.src = s.thumbnail;
+      } else {
+        thumb = document.createElement("div");
+        thumb.className = "placeholder";
+        thumb.textContent = "minimized — restores when shared";
+      }
+      const label = document.createElement("div");
+      label.className = "label";
+      if (s.icon) {
+        const icon = document.createElement("img");
+        icon.className = "icon";
+        icon.src = s.icon;
+        label.appendChild(icon);
+      }
+      const text = document.createElement("span");
+      text.textContent = s.name;
+      label.appendChild(text);
+      tile.appendChild(thumb);
+      tile.appendChild(label);
+      tile.addEventListener("click", async () => {
+        selectedId = s.id;
+        shareBtn.disabled = false;
+        winAudio = null;
+        if (s.kind === "window") {
+          winAudio = await pickerAPI.windowAudio(s.id).catch(() => null);
+        }
+        rebuildAudioSelect();
+        render();
+      });
+      tile.addEventListener("dblclick", () => {
+        selectedId = s.id;
+        submit();
+      });
+      grid.appendChild(tile);
+    }
+  }
+
+  function setTab(next) {
+    kind = next;
+    document.getElementById("tab-window").classList.toggle("active", kind === "window");
+    document.getElementById("tab-screen").classList.toggle("active", kind === "screen");
+    render();
+  }
+  document.getElementById("tab-window").addEventListener("click", () => setTab("window"));
+  document.getElementById("tab-screen").addEventListener("click", () => setTab("screen"));
+
+  function addOption(value, text) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = text;
+    audioSel.appendChild(o);
+  }
+
+  // Best-effort match between a window title and an audio app name,
+  // e.g. "Team Fortress 2 - OpenGL" vs "Team Fortress 2".
+  function matchApp(title) {
+    const t = title.toLowerCase();
+    let best = null;
+    for (const { name } of audioOpts.apps || []) {
+      const a = name.toLowerCase();
+      if (t.includes(a) || a.includes(t)) {
+        if (!best || name.length > best.length) best = name;
+      }
+    }
+    return best;
+  }
+
+  // Whole-desktop audio is only offered when sharing a whole screen —
+  // sharing one window captures at most that application's audio, so a
+  // call playing elsewhere can't feed back into itself.
+  function rebuildAudioSelect() {
+    const selected = sources.find((s) => s.id === selectedId);
+    audioSel.replaceChildren();
+    audioNote.textContent = "";
+    addOption("none", "No audio");
+    if (audioOpts.kind === "loopback") {
+      if (selected && selected.kind === "screen") {
+        addOption("loopback", "System audio");
+        audioSel.value = "loopback";
+      } else if (selected && selected.kind === "window" && winAudio && winAudio.pid) {
+        addOption(
+          "pid:" + winAudio.pid + "|" + (winAudio.klass || ""),
+          "This window's app" + (winAudio.klass ? ` (${winAudio.klass})` : "")
+        );
+        audioSel.value = "pid:" + winAudio.pid + "|" + (winAudio.klass || "");
+      } else if (selected && selected.kind === "window") {
+        audioNote.textContent = "couldn't identify this window's app";
+      }
+      return;
+    }
+    if (audioOpts.kind === "venmic") {
+      const previous = audioSel.dataset.userChoice;
+      if (selected && selected.kind === "screen") {
+        addOption("system", "All applications");
+      }
+      if (selected && selected.kind === "window" && winAudio && winAudio.pid) {
+        // matched by process id + window class — works even before the
+        // app makes a sound
+        addOption(
+          "pid:" + winAudio.pid + "|" + (winAudio.klass || ""),
+          "This window's app" + (winAudio.klass ? ` (${winAudio.klass})` : "")
+        );
+      }
+      for (const { name, live } of audioOpts.apps) {
+        addOption("app:" + name, live ? name : name + " (idle)");
+      }
+      // keep the user's explicit choice across refreshes
+      if (previous && [...audioSel.options].some((o) => o.value === previous)) {
+        audioSel.value = previous;
+      } else if (selected && selected.kind === "window" && winAudio && winAudio.pid) {
+        audioSel.value = "pid:" + winAudio.pid + "|" + (winAudio.klass || "");
+      } else if (selected && selected.kind === "window") {
+        const match = matchApp(selected.name);
+        if (match) audioSel.value = "app:" + match;
+      } else if (selected && selected.kind === "screen") {
+        audioSel.value = "system";
+      }
+      return;
+    }
+    audioNote.textContent = "audio capture unavailable (PipeWire not found)";
+  }
+
+  audioSel.addEventListener("change", () => {
+    audioSel.dataset.userChoice = audioSel.value;
+  });
+
+  async function loadAudio() {
+    audioOpts = await pickerAPI.audioOptions();
+    rebuildAudioSelect();
+  }
+
+  // Streams come and go (apps drop them when paused) — keep the list live
+  setInterval(loadAudio, 1500);
+
+  function submit() {
+    if (!selectedId) return;
+    pickerAPI.submit({ sourceId: selectedId, audio: audioSel.value });
+  }
+  shareBtn.addEventListener("click", submit);
+  document.getElementById("cancel").addEventListener("click", () => pickerAPI.submit(null));
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") pickerAPI.submit(null);
+  });
+
+  (async () => {
+    await loadAudio();
+    sources = await pickerAPI.sources();
+    render();
+  })();
+</script>
+</body>
+</html>
