@@ -25,6 +25,25 @@ const {
 const fs = require("fs");
 const path = require("path");
 
+// ---- single instance --------------------------------------------------------
+// Close hides to the tray, so users often "reopen" the app from the launcher
+// while it is still running, ending up with several full Electron processes.
+// Only one instance may run: a second launch just surfaces the window of the
+// running instance and exits. (File → Change server stays safe: app.relaunch
+// starts the new process only after this one exits and releases the lock.)
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
+app.on("second-instance", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    showMainWindow();
+  } else {
+    // e.g. still on the first-run server prompt
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) surfaceWindow(win);
+  }
+});
+
 // Local minidumps (never uploaded) — land in userData/Crashpad. The
 // child-process-gone log below usually identifies the culprit already.
 crashReporter.start({ uploadToServer: false });
@@ -497,11 +516,22 @@ let mainWindow = null;
 let tray = null;
 let quitting = false;
 
-function showMainWindow() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
+function surfaceWindow(win) {
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  // Compositors with focus-stealing prevention (native Wayland) may refuse
+  // the raise; request attention until the window actually gets focus.
+  if (!win.isFocused()) {
+    win.flashFrame(true);
+    win.once("focus", () => {
+      if (!win.isDestroyed()) win.flashFrame(false);
+    });
   }
+}
+
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) surfaceWindow(mainWindow);
 }
 
 function createTray() {
